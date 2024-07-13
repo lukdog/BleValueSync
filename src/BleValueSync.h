@@ -1,4 +1,4 @@
-#ifdef BleValueSync_h
+#ifndef BleValueSync_h
 #define BleValueSync_h
 
 #include <ArduinoBLE.h>
