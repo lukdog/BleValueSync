@@ -3,8 +3,6 @@
 
 #include <ArduinoBLE.h>
 
-enum ValueType {COUNTER, VALUE};
-
 class BleSyncValue {
 public:
   BleSyncValue();
@@ -14,16 +12,21 @@ public:
     _characteristic->writeValue(0);
   }
 
-  void setValue(uint32_t newValue) {
-    if(newValue == value) {return;}
-    value = newValue;
-    _characteristic->writeValue(value);
+  void setValue(int32_t newValue) {
+    if(newValue == getValue()) {return;}
+    //value = newValue;
+    _characteristic->writeValue(newValue);
+  }
+
+  int32_t getValue() {
+    int32_t v = 0;
+    _characteristic->readValue(v);
+    return v;
   }
 
 private:
   const char *_uuid;
   uint32_t value = 0;
-  ValueType _type = VALUE;
   BLEIntCharacteristic *_characteristic;
   
 friend class BleSync;
@@ -72,22 +75,18 @@ public:
   void sync(unsigned long waitTime){
     
     long startSync = millis();
-  
     while(millis() - startSync < waitTime){
-
       BLEDevice central = BLE.central();
-
       if(central){
         while(central.connected()){
           delay(1);
         }
       }
-
       delay(100);
     }
   }
 
-private:
+protected:
   BLEService *_bleService;
   BleSyncValue **_values;
   const char *_name;
@@ -96,5 +95,5 @@ private:
   uint8_t _currentQuantity = 0;
 };
 
-#endif
 
+#endif
