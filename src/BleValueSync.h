@@ -96,4 +96,113 @@ protected:
 };
 
 
+class BleReaderValue {
+public:
+  BleReaderValue(const char* uuid, bool resetAfterRead = false){
+    _uuid = uuid;
+    _resetAfterRead = resetAfterRead;
+  }
+
+  bool syncValue(BLEDevice peripheral){
+    
+    BLECharacteristic ch = peripheral.characteristic(_uuid);
+
+    if (!ch) {
+      return false;
+    } else if (_resetAfterRead && !ch.canWrite()) {  
+      return false;
+    }
+  
+    ch.readValue(_value);
+  
+    if(_resetAfterRead){
+      ch.writeValue((int32_t)0);
+    }
+
+    return true; 
+  }
+
+  int32_t getValue(){
+    return _value;
+  }
+
+private:
+  const char *_uuid;
+  bool _resetAfterRead = false;
+  int32_t _value = 0;
+};
+
+class BleReader {
+public:
+  BleReader(const char* readerName, const char* readerUUID, uint8_t valueQuantity){
+    _name = readerName;
+    _uuid = readerUUID;
+    _quantity = valueQuantity;
+    _values = new BleReaderValue*[valueQuantity];
+  }
+
+  bool addValue(BleReaderValue *v){
+    if(_currentQuantity == _quantity ) {
+      return false;
+    }
+
+    _values[_currentQuantity] = v;
+    _currentQuantity++;
+
+    return true;
+      
+  }
+
+  bool syncAll(long syncTime){
+    
+    long startMillis = millis();
+    BLE.scanForUuid(_uuid);
+
+    while(millis() - startMillis < syncTime){
+      BLEDevice peripheral = BLE.available();
+
+      if (peripheral && peripheral.localName() == _name) {
+
+        BLE.stopScan();
+
+        if (!peripheral.connect()) {
+          BLE.scanForUuid(_uuid);
+          delay(200);
+          continue;
+        } 
+
+        if (!peripheral.discoverAttributes()) {
+          peripheral.disconnect();
+          BLE.scanForUuid(_uuid);
+          delay(200);
+          continue;
+        }
+
+        for(uint8_t i = 0; i<_currentQuantity; i++){
+          _values[i]->syncValue(peripheral);
+          delay(1);
+        }
+
+        peripheral.disconnect();
+        return true;
+      }
+
+      delay(200);
+    }
+
+ 
+    BLE.stopScan();
+    return false;
+    
+  }
+
+private:
+  const char *_name;
+  const char *_uuid;
+  BleReaderValue **_values;
+  uint8_t _quantity = 0;
+  uint8_t _currentQuantity = 0;
+};
+
+
 #endif

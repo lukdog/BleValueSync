@@ -1,91 +1,71 @@
-# BleValueSync Library Documentation
+# BLE Arduino Library
 
-The `BleValueSync` library simplifies the configuration and communication using Bluetooth Low Energy (BLE) peripherals for synchronizing numeric values. This library leverages the `ArduinoBLE` library to facilitate BLE operations.
-
-## Overview
-
-`BleValueSync` provides an easy-to-use interface for setting up BLE peripherals and syncing numeric values. It consists of two main classes:
-
-- `BleSyncValue`: Represents a BLE characteristic that holds a numeric value.
-- `BleSync`: Manages BLE services and characteristics, and handles BLE communication.
-
-## Installation
-
-To use the `BleValueSync` library, include the header file in your project:
-
-```cpp
-#include "BleValueSync.h"
-```
-
-Make sure you have the `ArduinoBLE` library installed, as `BleValueSync` depends on it.
+This Arduino library simplifies the use of Bluetooth Low Energy (BLE) for creating multiple peripheral devices and a single aggregator device. It provides classes to manage BLE characteristics and synchronize values between peripherals and the aggregator.
 
 ## Classes
 
-### BleSyncValue
+### `BleSyncValue`
+Represents a BLE characteristic that can be synchronized.
 
-The `BleSyncValue` class represents a BLE characteristic that holds a numeric value.
-
-#### Constructor
-
-```cpp
-BleSyncValue();
-BleSyncValue(const char *uuid, unsigned int property);
-```
-
-- `uuid`: The UUID of the BLE characteristic.
-- `property`: The BLE property (e.g., `BLERead | BLEWrite`).
+#### Constructors
+- `BleSyncValue()`
+- `BleSyncValue(const char *uuid, unsigned int property)`
 
 #### Methods
+- `void setValue(int32_t newValue)`: Sets a new value for the characteristic.
+- `int32_t getValue()`: Retrieves the current value of the characteristic.
 
-- `void setValue(uint32_t newValue)`: Sets the value of the characteristic and updates the BLE characteristic if the value has changed.
-
-### BleSync
-
-The `BleSync` class manages BLE services and characteristics and handles BLE communication.
+### `BleSync`
+Handles a collection of `BleSyncValue` objects and manages BLE initialization and synchronization.
 
 #### Constructor
-
-```cpp
-BleSync(const char *name, const char *uuid, uint8_t valuesQuantity);
-```
-
-- `name`: The local name of the BLE device.
-- `uuid`: The UUID of the BLE service.
-- `valuesQuantity`: The number of `BleSyncValue` instances that can be managed.
+- `BleSync(const char *name, const char *uuid, uint8_t valuesQuantity)`
 
 #### Methods
+- `bool addValue(BleSyncValue *v)`: Adds a `BleSyncValue` to the collection.
+- `bool initBLE()`: Initializes the BLE service and starts advertising.
+- `void sync(unsigned long waitTime)`: Synchronizes the BLE values.
 
-- `bool addValue(BleSyncValue *v)`: Adds a `BleSyncValue` instance to the BLE service.
-- `bool initBLE()`: Initializes the BLE device and starts advertising.
-- `void sync(unsigned long waitTime)`: Synchronizes the BLE device for the specified duration in milliseconds.
+### `BleReaderValue`
+Represents a BLE characteristic that can be read from a peripheral device.
 
-## Usage
+#### Constructor
+- `BleReaderValue(const char* uuid, bool resetAfterRead = false)`
 
-Here is an example of how to use the `BleValueSync` library:
+#### Methods
+- `bool syncValue(BLEDevice peripheral)`: Synchronizes the value from the peripheral.
+- `int32_t getValue()`: Retrieves the current value.
+
+### `BleReader`
+Manages a collection of `BleReaderValue` objects and handles BLE scanning and synchronization.
+
+#### Constructor
+- `BleReader(const char* readerName, const char* readerUUID, uint8_t valueQuantity)`
+
+#### Methods
+- `bool addValue(BleReaderValue *v)`: Adds a `BleReaderValue` to the collection.
+- `bool syncAll(long syncTime)`: Synchronizes all values from the peripheral devices.
+
+## Examples
+
+### Peripheral Device Sketch
 
 ```cpp
 #include <ArduinoBLE.h>
 #include "BleValueSync.h"
 
-// Define BLE service and characteristic UUIDs
-const char *serviceUUID = "12345678-1234-5678-1234-56789abcdef0";
-const char *charUUID1 = "12345678-1234-5678-1234-56789abcdef1";
-const char *charUUID2 = "12345678-1234-5678-1234-56789abcdef2";
+BleSyncValue temperatureValue("19B10000-E8F2-537E-4F6C-D104768A1214", BLERead | BLENotify);
+BleSyncValue humidityValue("19B10001-E8F2-537E-4F6C-D104768A1214", BLERead | BLENotify);
 
-// Create BleSyncValue instances
-BleSyncValue value1(charUUID1, BLERead | BLEWrite);
-BleSyncValue value2(charUUID2, BLERead | BLEWrite);
-
-// Create BleSync instance
-BleSync bleSync("MyBLEDevice", serviceUUID, 2);
+BleSync peripheralDevice("PeripheralDevice", "19B10000-E8F2-537E-4F6C-D104768A1214", 2);
 
 void setup() {
-  // Add values to the BLE service
-  bleSync.addValue(&value1);
-  bleSync.addValue(&value2);
-
-  // Initialize BLE
-  if (!bleSync.initBLE()) {
+  Serial.begin(9600);
+  
+  peripheralDevice.addValue(&temperatureValue);
+  peripheralDevice.addValue(&humidityValue);
+  
+  if (!peripheralDevice.initBLE()) {
     Serial.println("Failed to initialize BLE");
     while (1);
   }
@@ -94,25 +74,48 @@ void setup() {
 }
 
 void loop() {
-  // Sync BLE for 1000 milliseconds
-  bleSync.sync(1000);
+  int32_t temperature = random(20, 30);
+  int32_t humidity = random(40, 60);
 
-  // Update the values
-  value1.setValue(random(0, 100));
-  value2.setValue(random(0, 100));
-  
-  delay(1000);
+  temperatureValue.setValue(temperature);
+  humidityValue.setValue(humidity);
+
+  peripheralDevice.sync(5000);  // Sync for 5 seconds
 }
 ```
 
-In this example:
+### Aggregator Device Sketch
 
-1. Two `BleSyncValue` instances are created with their respective UUIDs and properties.
-2. A `BleSync` instance is created to manage the BLE service and characteristics.
-3. The `BleSync` instance is initialized and starts advertising the BLE service.
-4. In the `loop` function, the BLE device is synchronized, and the values of the characteristics are updated periodically.
+```cpp
+#include <ArduinoBLE.h>
+#include "BleValueSync.h"
 
+BleReaderValue temperatureValue("19B10000-E8F2-537E-4F6C-D104768A1214", false);
+BleReaderValue humidityValue("19B10001-E8F2-537E-4F6C-D104768A1214", false);
 
----
+BleReader peripheral("PeripheralDevice", "19B10000-E8F2-537E-4F6C-D104768A1214", 2);
 
-This documentation provides a comprehensive guide to using the `BleValueSync` library for BLE communication in Arduino projects.
+void setup() {
+  Serial.begin(9600);
+  
+  peripheral.addValue(&temperatureValue);
+  peripheral.addValue(&humidityValue);
+
+  BLE.begin();
+}
+
+void loop() {
+  if (peripheral.syncAll(10000)) {  // Sync for 10 seconds
+    Serial.print("Temperature: ");
+    Serial.println(temperatureValue.getValue());
+    Serial.print("Humidity: ");
+    Serial.println(humidityValue.getValue());
+  } else {
+    Serial.println("Failed to sync with peripherals");
+  }
+
+  delay(10000);
+}
+```
+
+In these examples, the peripheral device creates two BLE characteristics (temperature and humidity) and advertises them. The aggregator device scans for the peripheral, reads the values of these characteristics, and prints them to the serial monitor.
